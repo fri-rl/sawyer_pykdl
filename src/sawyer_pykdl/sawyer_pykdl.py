@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 # Copyright (c) 2013-2014, Rethink Robotics
 # All rights reserved.
@@ -28,11 +28,13 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 import numpy as np
+
 import PyKDL
 
 import rospy
 
-import intera_interface
+# RUDI: LETS GET RID OF INTERA
+# import intera_interface
 
 from sawyer_kdl.kdl_parser import kdl_tree_from_urdf_model
 from urdf_parser_py.urdf import URDF
@@ -41,18 +43,23 @@ class sawyer_kinematics(object):
     """
     Sawyer Kinematics with PyKDL
     """
-    def __init__(self, limb):
+    def __init__(self, limb='right'):
         self._sawyer = URDF.from_parameter_server(key='robot_description')
         self._kdl_tree = kdl_tree_from_urdf_model(self._sawyer)
         self._base_link = self._sawyer.get_root()
-        self._tip_link = limb + '_hand'
+
+        # RUDI: LETS GET RID OF INTERA
+        #self._tip_link = limb + '_hand'
+        self._tip_link = 'right_gripper_tip'
         self._tip_frame = PyKDL.Frame()
         self._arm_chain = self._kdl_tree.getChain(self._base_link,
                                                   self._tip_link)
 
+        # RUDI: LETS GET RID OF INTERA
         # Sawyer Interface Limb Instances
-        self._limb_interface = intera_interface.Limb(limb)
-        self._joint_names = self._limb_interface.joint_names()
+        # self._limb_interface = intera_interface.Limb(limb)
+        #self._joint_names = self._limb_interface.joint_names()
+        self._joint_names = ["right_j0", "right_j1", "right_j2", "right_j3", "right_j4", "right_j5", "right_j6"]
         self._num_jnts = len(self._joint_names)
 
         # KDL Solvers
@@ -85,15 +92,23 @@ class sawyer_kinematics(object):
         kdl_array = PyKDL.JntArray(self._num_jnts)
 
         if values is None:
-            if type == 'positions':
-                cur_type_values = self._limb_interface.joint_angles()
-            elif type == 'velocities':
-                cur_type_values = self._limb_interface.joint_velocities()
-            elif type == 'torques':
-                cur_type_values = self._limb_interface.joint_efforts()
+            # print("RUDI: right now, the joint state always has to be passed")
+            cur_type_values = dict(zip(self._joint_names,[0.0]*self._num_jnts))
+            #
+            # if type == 'positions':
+            #     cur_type_values = self._limb_interface.joint_angles()
+            # elif type == 'velocities':
+            #     cur_type_values = self._limb_interface.joint_velocities()
+            # elif type == 'torques':
+            #     cur_type_values = self._limb_interface.joint_efforts()
+
+        elif isinstance(values,(list, tuple)):
+            cur_type_values = dict(zip(self._joint_names,values))
+        elif isinstance(values, np.ndarray):
+            cur_type_values = dict(zip(self._joint_names,values.tolist()))
         else:
-            cur_type_values = values
-        
+            raise ValueError("Unsupported type for values: {}".format(type))
+
         for idx, name in enumerate(self._joint_names):
             kdl_array[idx] = cur_type_values[name]
         if type == 'velocities':
@@ -107,15 +122,29 @@ class sawyer_kinematics(object):
                 mat[i,j] = data[i,j]
         return mat
 
-    def forward_position_kinematics(self,joint_values=None):
+    def forward_position_kinematics(self, joint_values=None, rot_type='quat'):
         end_frame = PyKDL.Frame()
         self._fk_p_kdl.JntToCart(self.joints_to_kdl('positions',joint_values),
                                  end_frame)
         pos = end_frame.p
         rot = PyKDL.Rotation(end_frame.M)
-        rot = rot.GetQuaternion()
-        return np.array([pos[0], pos[1], pos[2],
-                         rot[0], rot[1], rot[2], rot[3]])
+
+        if rot_type=='quat':
+            rot = rot.GetQuaternion()
+            ret = np.array([pos[0], pos[1], pos[2], rot[0], rot[1], rot[2], rot[3]])
+
+        elif rot_type=='rpy':
+            rot = rot.GetRPY()
+            ret = np.array([pos[0], pos[1], pos[2], rot[0], rot[1], rot[2]])
+
+        elif rot_type=='zyx':
+            rot = rot.GetEulerZYX()
+            ret = np.array([pos[0], pos[1], pos[2], rot[0], rot[1], rot[2]])
+
+        else:
+            raise ValueError("Unknown rot_type: {}".format(rot_type))
+
+        return ret
 
     def forward_velocity_kinematics(self,joint_velocities=None):
         end_frame = PyKDL.FrameVel()

@@ -8,8 +8,8 @@ find_package(catkin
   geometry_msgs
   sensor_msgs
   tf
-  intera_core_msgs
-  intera_interface
+#  intera_core_msgs
+#  intera_interface
 )
 
 catkin_python_setup()
@@ -21,8 +21,8 @@ catkin_package(
   sensor_msgs
   urdfdom
   tf
-  intera_interface
-  intera_core_msgs
+#  intera_interface
+#  intera_core_msgs
   DEPENDS
   python_orocos_kdl
   urdfdom
